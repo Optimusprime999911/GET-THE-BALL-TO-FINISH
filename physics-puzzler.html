@@ -1,0 +1,1488 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Physics Puzzler — Converted Save</title>
+<style>
+:root{
+  --bg:#071427; --panel:#071623; --accent:#60a5fa; --muted:#94a3b8; --glass:rgba(255,255,255,0.03);
+}
+html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial;color:#e6eef8;background:linear-gradient(180deg,var(--bg),#03101a)}
+.app{display:grid;grid-template-columns:720px 1fr;gap:18px;height:100vh;padding:18px}
+.panel{background:var(--panel);border-radius:12px;padding:14px;box-shadow:0 8px 30px rgba(0,0,0,0.6);overflow:auto}
+h1{font-size:18px;margin:0 0 10px 0}
+canvas{background:linear-gradient(180deg,#031428 0%,#021018 100%);width:100%;height:100%;display:block;border-radius:8px}
+button,.btn{appearance:none;border:0;background:var(--accent);color:#022;padding:8px 10px;border-radius:8px;cursor:pointer;font-weight:700}
+.btn.secondary{background:transparent;color:var(--muted);border:1px solid rgba(255,255,255,0.04)}
+.row{display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+label{color:var(--muted);font-size:13px}
+.tools{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.tool{padding:8px 10px;border-radius:8px;background:var(--glass);color:var(--muted);cursor:pointer;border:1px solid rgba(255,255,255,0.03)}
+.tool.active{background:linear-gradient(90deg,#022a4f,#093b5e);color:#bfe1ff}
+.small{font-size:12px;color:var(--muted)}
+.inspector{margin-top:12px;padding:10px;border-radius:10px;background:rgba(255,255,255,0.02)}
+.mini{padding:6px 8px;font-size:13px}
+.footer{margin-top:10px;display:flex;justify-content:space-between;align-items:center}
+.panel-scroll{max-height:58vh;overflow:auto;padding-right:6px}
+.hidden{display:none}
+select,input[type=range],input[type=number]{width:100%}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="panel" id="left">
+    <h1>Physics Puzzler — Converted Save</h1>
+
+    <div class="row">
+      <div class="tools" role="toolbar" aria-label="tools">
+        <div class="tool active" data-tool="draw" id="tool-draw">Draw</div>
+        <div class="tool" data-tool="erase" id="tool-erase">Erase</div>
+        <div class="tool" data-tool="place" id="tool-place">Place Box</div>
+        <div class="tool" data-tool="ball" id="tool-ball">Move Ball</div>
+        <div class="tool" data-tool="goal" id="tool-goal">Move Goal</div>
+        <div class="tool" data-tool="portal" id="tool-portal">Portal</div>
+        <div class="tool" data-tool="moveplat" id="tool-moveplat">Moving Plat</div>
+        <div class="tool" data-tool="trampoline" id="tool-trampoline">Trampoline</div>
+        <div class="tool" data-tool="timed" id="tool-timed">Timed</div>
+        <div class="tool" data-tool="multiball" id="tool-multiball">Multi-Ball / Co-op</div>
+      </div>
+    </div>
+
+    <div class="row">
+      <button class="btn" id="playBtn">▶ Play</button>
+      <button class="btn secondary" id="pauseBtn">⏸ Pause</button>
+      <button class="btn secondary" id="stepBtn">Step</button>
+      <button class="btn secondary" id="resetBtn">↺ Reset</button>
+      <button class="btn secondary" id="undoBtn">Undo</button>
+      <button class="btn secondary" id="redoBtn">Redo</button>
+      <button class="btn secondary" id="clearBtn">Clear</button>
+    </div>
+
+    <div class="row save-row">
+      <button class="mini btn secondary" id="quickSaveBtn">Quick Save</button>
+      <button class="mini btn secondary" id="quickLoadBtn">Quick Load</button>
+      <button class="mini btn secondary" id="exportBtn">Export (.json)</button>
+      <label class="mini btn secondary" for="importFile">Import (.json)</label>
+      <input id="importFile" class="file-input" type="file" accept=".json,application/json" />
+    </div>
+
+    <div class="panel-scroll">
+      <div class="row" style="gap:12px">
+        <div style="flex:1">
+          <label class="small">Keyboard step size: <span id="stepSizeLabel">12</span> px</label>
+          <input id="stepSize" type="range" min="1" max="120" value="12" />
+          <div class="small">Hold <kbd>Shift</kbd> to ×2, <kbd>Alt</kbd> to ×0.5 when nudging</div>
+        </div>
+      </div>
+
+      <div class="row" style="gap:12px">
+        <div style="flex:1">
+          <div class="small">Nudge Selected Ball</div>
+          <div style="display:flex;gap:8px">
+            <button class="btn secondary nudge" id="nudgeLeft">←</button>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <button class="btn secondary nudge" id="nudgeUp">↑</button>
+              <button class="btn secondary nudge" id="nudgeDown">↓</button>
+            </div>
+            <button class="btn secondary nudge" id="nudgeRight">→</button>
+          </div>
+        </div>
+
+        <div style="flex:1">
+          <div class="small">Nudge Green Goal</div>
+          <div style="display:flex;gap:8px">
+            <button class="btn secondary nudge" id="goalLeft">←</button>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <button class="btn secondary nudge" id="goalUp">↑</button>
+              <button class="btn secondary nudge" id="goalDown">↓</button>
+            </div>
+            <button class="btn secondary nudge" id="goalRight">→</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:8px">
+        <label>Gravity: <span id="gravVal">900</span> px/s²</label>
+        <input id="grav" type="range" min="0" max="2000" value="900" />
+      </div>
+
+      <div style="margin-top:12px">
+        <label>Ball speed cap: <span id="capVal">800</span> px/s</label>
+        <input id="cap" type="range" min="100" max="2000" value="800" />
+      </div>
+
+      <!-- inspectors + Multi-Ball panel -->
+      <div class="inspector" id="portalInspector" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><strong id="inspectorTitle">Portal</strong> <span id="inspectorTag" class="small">(A)</span></div>
+          <button class="mini btn secondary" id="inspectorDeselect">Deselect</button>
+        </div>
+        <div class="row">
+          <label class="small">Angle: <span id="inspectorAngleLabel">-90°</span></label>
+          <input id="inspectorAngle" type="range" min="-180" max="180" value="-90" />
+        </div>
+        <div class="row" style="align-items:center">
+          <label class="small">Preserve vector</label>
+          <input id="inspectorPreserve" type="checkbox" />
+        </div>
+        <div class="row" style="align-items:center">
+          <label class="small">Speed multiplier</label>
+          <input id="inspectorSpeed" type="number" step="0.1" min="0.1" value="1.0" style="width:90px" />
+        </div>
+        <div class="row" style="align-items:center">
+          <label class="small">One-way (A→B)</label>
+          <input id="inspectorOneWay" type="checkbox" />
+        </div>
+      </div>
+
+      <div class="inspector" id="movePlatInspector" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><strong id="mpTitle">Platform</strong></div>
+          <button class="mini btn secondary" id="mpDeselect">Deselect</button>
+        </div>
+        <div class="row"><label class="small">Width</label><input id="mpWidth" type="number" min="8" value="120" /></div>
+        <div class="row"><label class="small">Height</label><input id="mpHeight" type="number" min="4" value="18" /></div>
+        <div class="row"><label class="small">Speed (px/s)</label><input id="mpSpeed" type="number" step="10" min="10" value="160" /></div>
+        <div class="row"><label class="small">Mode</label><select id="mpMode"><option value="pingpong">Ping-Pong</option><option value="loop">Loop</option></select></div>
+      </div>
+
+      <div class="inspector" id="trampInspector" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><strong id="trampTitle">Trampoline</strong></div>
+          <button class="mini btn secondary" id="trampDeselect">Deselect</button>
+        </div>
+        <div class="row">
+          <label class="small">Strength: <span id="trampStrengthLabel">1.8</span></label>
+          <input id="trampStrength" type="range" min="0.5" max="4.0" step="0.1" value="1.8" />
+        </div>
+        <div class="row" style="justify-content:space-between">
+          <button class="mini btn secondary" id="trampDelete">Delete trampoline</button>
+          <div class="small muted">Changes are undoable</div>
+        </div>
+      </div>
+
+      <div class="inspector" id="timedInspector" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><strong id="timedTitle">Timed</strong></div>
+          <button class="mini btn secondary" id="timedDeselect">Deselect</button>
+        </div>
+        <div class="row">
+          <label class="small">Width</label><input id="timedW" type="number" min="8" value="120" />
+          <label class="small">Height</label><input id="timedH" type="number" min="8" value="40" />
+        </div>
+        <div class="row">
+          <label class="small">Period (s)</label><input id="timedPeriod" type="number" min="0.2" step="0.1" value="2.0" />
+          <label class="small">On duration (s)</label><input id="timedOn" type="number" min="0.05" step="0.05" value="1.0" />
+        </div>
+        <div class="row">
+          <label class="small">Phase (s)</label><input id="timedPhase" type="number" step="0.1" value="0.0" />
+          <label class="small">Enabled</label><input id="timedEnabled" type="checkbox" checked />
+        </div>
+        <div class="row" style="justify-content:space-between">
+          <div class="small muted" id="timedState">State: —</div>
+          <button class="mini btn secondary" id="timedDelete">Delete</button>
+        </div>
+      </div>
+
+      <div class="inspector" id="multiBallPanel" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><strong>Multi-Ball / Local Co-op</strong></div>
+          <button class="mini btn secondary" id="mbClose">Close</button>
+        </div>
+
+        <div class="row">
+          <div style="flex:1">
+            <label class="small">Selected Ball</label>
+            <select id="ballSelect"></select>
+          </div>
+          <div style="width:160px;display:flex;gap:8px">
+            <button class="mini btn secondary" id="addBallBtn">+ Add Ball</button>
+            <button class="mini btn secondary" id="removeBallBtn">− Remove</button>
+          </div>
+        </div>
+
+        <div class="row">
+          <label class="small">Control</label>
+          <select id="ballControl">
+            <option value="mouse">Mouse drag</option>
+            <option value="arrows">Keyboard — Arrows</option>
+            <option value="wasd">Keyboard — WASD</option>
+          </select>
+        </div>
+
+        <div class="row">
+          <label class="small">Co-op win mode</label>
+          <input id="coopMode" type="checkbox" /> <span class="small muted">All balls must be in goal</span>
+        </div>
+
+        <div class="small muted" style="margin-top:8px">
+          • Assign one ball to <kbd>WASD</kbd> and another to <kbd>Arrows</kbd> for two-player local play, or set balls to <kbd>Mouse</kbd> for pointer control.
+        </div>
+      </div>
+
+    </div>
+
+    <div class="footer">
+      <div class="stat" id="status">Mode: Edit</div>
+      <div class="small">Loaded: converted save • <span id="tries">Tries: 0</span></div>
+    </div>
+  </div>
+
+  <div class="panel" id="right" style="padding:8px;">
+    <canvas id="c" width="1400" height="820"></canvas>
+  </div>
+</div>
+
+<script>
+/* Physics Puzzler — Full build (converted save loaded)
+   - Loads the "convertedSave" object (embedded below) as the initial scene.
+   - All features present: multi-ball, portals (with angle handle + inspector),
+     moving platforms, trampolines, timed obstacles, undo/redo, quick save/load, export/import, step, clear, etc.
+*/
+
+/* ---------- converted save embedded (from the file you uploaded) ---------- */
+const convertedSave =
+{
+  "version": 1,
+  "created": "2025-12-03T06:22:00.182Z",
+  "segments": [
+    {
+      "ax": 43,
+      "ay": 723,
+      "bx": 1160,
+      "by": 723
+    },
+    {
+      "ax": 104,
+      "ay": 699,
+      "bx": 207,
+      "by": 703
+    },
+    {
+      "ax": 207,
+      "ay": 703,
+      "bx": 318,
+      "by": 624
+    },
+    {
+      "ax": 318,
+      "ay": 624,
+      "bx": 390,
+      "by": 672
+    },
+    {
+      "ax": 390,
+      "ay": 672,
+      "bx": 460,
+      "by": 624
+    },
+    {
+      "ax": 460,
+      "ay": 624,
+      "bx": 520,
+      "by": 576
+    },
+    {
+      "ax": 520,
+      "ay": 576,
+      "bx": 584,
+      "by": 612
+    },
+    {
+      "ax": 584,
+      "ay": 612,
+      "bx": 680,
+      "by": 612
+    },
+    {
+      "ax": 680,
+      "ay": 612,
+      "bx": 760,
+      "by": 520
+    },
+    {
+      "ax": 760,
+      "ay": 520,
+      "bx": 920,
+      "by": 600
+    },
+    {
+      "ax": 920,
+      "ay": 600,
+      "bx": 980,
+      "by": 640
+    },
+    {
+      "ax": 980,
+      "ay": 640,
+      "bx": 1040,
+      "by": 660
+    },
+    {
+      "ax": 1040,
+      "ay": 660,
+      "bx": 1110,
+      "by": 700
+    }
+  ],
+  "boxes": [
+    {
+      "x": 540,
+      "y": 470,
+      "w": 40,
+      "h": 40,
+      "vx": 0,
+      "vy": 0
+    }
+  ],
+  "balls": [
+    {
+      "id": "b1",
+      "x": 120,
+      "y": 80,
+      "r": 12,
+      "vx": 0,
+      "vy": 0,
+      "teleportCooldown": 0,
+      "lastTrampolineTime": 0,
+      "control": "mouse"
+    }
+  ],
+  "startBalls": [
+    {
+      "id": "b1",
+      "x": 120,
+      "y": 80,
+      "r": 12,
+      "vx": 0,
+      "vy": 0,
+      "teleportCooldown": 0,
+      "lastTrampolineTime": 0,
+      "control": "mouse"
+    }
+  ],
+  "goal": {
+    "x": 1060,
+    "y": 640,
+    "r": 28
+  },
+  "gravity": 900,
+  "velocityCap": 800,
+  "portals": [
+    {
+      "id": "p1",
+      "x": 760,
+      "y": 512,
+      "r": 28,
+      "partnerId": "p2",
+      "angle": -1.5707963267948966,
+      "preserveVector": false,
+      "speedMultiplier": 1,
+      "oneWay": false,
+      "tag": "A"
+    },
+    {
+      "id": "p2",
+      "x": 320,
+      "y": 520,
+      "r": 28,
+      "partnerId": "p1",
+      "angle": -1.5707963267948966,
+      "preserveVector": false,
+      "speedMultiplier": 1,
+      "oneWay": false,
+      "tag": "B"
+    },
+    {
+      "id": "p3",
+      "x": 540,
+      "y": 500,
+      "r": 28,
+      "partnerId": "p4",
+      "angle": -1.5707963267948966,
+      "preserveVector": false,
+      "speedMultiplier": 1,
+      "oneWay": false,
+      "tag": "A"
+    },
+    {
+      "id": "p4",
+      "x": 740,
+      "y": 540,
+      "r": 28,
+      "partnerId": "p3",
+      "angle": -1.5707963267948966,
+      "preserveVector": false,
+      "speedMultiplier": 1,
+      "oneWay": false,
+      "tag": "B"
+    },
+    {
+      "id": "p5",
+      "x": 200,
+      "y": 600,
+      "r": 28,
+      "partnerId": "p6",
+      "angle": -1.5707963267948966,
+      "preserveVector": false,
+      "speedMultiplier": 1,
+      "oneWay": false,
+      "tag": "A"
+    },
+    {
+      "id": "p6",
+      "x": 960,
+      "y": 540,
+      "r": 28,
+      "partnerId": "p5",
+      "angle": -1.5707963267948966,
+      "preserveVector": false,
+      "speedMultiplier": 1,
+      "oneWay": false,
+      "tag": "B"
+    },
+    {
+      "id": "p7",
+      "x": 180,
+      "y": 680,
+      "r": 28,
+      "partnerId": "p8",
+      "angle": -1.5707963267948966,
+      "preserveVector": false,
+      "speedMultiplier": 1,
+      "oneWay": false,
+      "tag": "A"
+    },
+    {
+      "id": "p8",
+      "x": 420,
+      "y": 520,
+      "r": 28,
+      "partnerId": "p7",
+      "angle": -1.5707963267948966,
+      "preserveVector": false,
+      "speedMultiplier": 1,
+      "oneWay": false,
+      "tag": "B"
+    },
+    {
+      "id": "p9",
+      "x": 103,
+      "y": 713,
+      "r": 28,
+      "partnerId": "p10",
+      "angle": -1.5707963267948966,
+      "preserveVector": false,
+      "speedMultiplier": 1,
+      "oneWay": false,
+      "tag": "A"
+    },
+    {
+      "id": "p10",
+      "x": 620,
+      "y": 480,
+      "r": 28,
+      "partnerId": "p9",
+      "angle": -1.5707963267948966,
+      "preserveVector": false,
+      "speedMultiplier": 1,
+      "oneWay": false,
+      "tag": "B"
+    },
+    {
+      "id": "p11",
+      "x": 46,
+      "y": 712,
+      "r": 28,
+      "partnerId": "p12",
+      "angle": -1.5707963267948966,
+      "preserveVector": false,
+      "speedMultiplier": 1,
+      "oneWay": false,
+      "tag": "A"
+    },
+    {
+      "id": "p12",
+      "x": 1060,
+      "y": 720,
+      "r": 28,
+      "partnerId": "p11",
+      "angle": -1.5707963267948966,
+      "preserveVector": false,
+      "speedMultiplier": 1,
+      "oneWay": false,
+      "tag": "B"
+    },
+    {
+      "id": "p13",
+      "x": 220,
+      "y": 660,
+      "r": 28,
+      "partnerId": "p14",
+      "angle": -1.5707963267948966,
+      "preserveVector": false,
+      "speedMultiplier": 1,
+      "oneWay": false,
+      "tag": "A"
+    },
+    {
+      "id": "p14",
+      "x": 880,
+      "y": 680,
+      "r": 28,
+      "partnerId": "p13",
+      "angle": -1.5707963267948966,
+      "preserveVector": false,
+      "speedMultiplier": 1,
+      "oneWay": false,
+      "tag": "B"
+    },
+    {
+      "id": "p15",
+      "x": 100,
+      "y": 700,
+      "r": 28,
+      "partnerId": "p16",
+      "angle": -1.5707963267948966,
+      "preserveVector": false,
+      "speedMultiplier": 1,
+      "oneWay": false,
+      "tag": "A"
+    },
+    {
+      "id": "p16",
+      "x": 1010,
+      "y": 690,
+      "r": 28,
+      "partnerId": "p15",
+      "angle": -1.5707963267948966,
+      "preserveVector": false,
+      "speedMultiplier": 1,
+      "oneWay": false,
+      "tag": "B"
+    }
+  ],
+  "movingPlatforms": [
+    {
+      "id": "m1",
+      "start": {
+        "x": 300,
+        "y": 620
+      },
+      "end": {
+        "x": 600,
+        "y": 620
+      },
+      "w": 140,
+      "h": 18,
+      "speed": 120,
+      "mode": "pingpong",
+      "t": 0,
+      "dir": 1,
+      "x": 300,
+      "y": 620,
+      "vx": 0,
+      "vy": 0
+    }
+  ],
+  "trampolines": [
+    {
+      "id": "tp1",
+      "ax": 460,
+      "ay": 500,
+      "bx": 560,
+      "by": 500,
+      "strength": 1.8
+    }
+  ],
+  "timedObstacles": [
+    {
+      "id": "to1",
+      "x": 760,
+      "y": 600,
+      "w": 160,
+      "h": 34,
+      "period": 3,
+      "onDuration": 1.2,
+      "phase": 0,
+      "enabled": true
+    }
+  ]
+};
+
+</script>
+
+<script>
+/* --- Now follows the full game code (physics, UI wiring, save/load, multi-ball, etc.)
+   This is the same full build as before, but it will call loadSceneFromObject(convertedSave)
+   at startup to initialize the level from your converted file. */
+
+const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
+function resizeCanvasToDisplay(){ const r = canvas.getBoundingClientRect(), dpr = window.devicePixelRatio||1; canvas.width = Math.max(1, Math.round(r.width*dpr)); canvas.height = Math.max(1, Math.round(r.height*dpr)); ctx.setTransform(dpr,0,0,dpr,0,0); }
+window.addEventListener('resize', ()=>{ resizeCanvasToDisplay(); draw(); });
+resizeCanvasToDisplay();
+
+let gravity = convertedSave.gravity || 900, velocityCap = convertedSave.velocityCap || 800;
+const dt = 1/60, restitution = 0.6, frictionGround = 0.02;
+let mode = 'draw';
+let isPlaying = false, tries = 0;
+
+let segments = [], boxes = [];
+let portals = [], portalIdCounter = 1, placingPortalFirst = null, selectedPortalId = null, rotatingPortal = null, isRotating = false;
+let movingPlatforms = [], movingPlatIdCounter = 1, placingMovingPlatFirst = null, selectedMovingPlatId = null;
+let trampolines = [], trampolineIdCounter = 1, placingTrampolineFirst = null, selectedTrampolineId = null;
+let timedObstacles = [], timedIdCounter = 1, selectedTimedId = null;
+
+let balls = [], ballIdCounter = 1;
+let startBalls = [];
+let selectedBallId = null;
+
+let isDown = false, drawBuffer = [], draggingBall = false, draggingGoal = false, dragBallPrev = null, dragGoalPrev = null, mouseDragAssignedBall = null;
+const undoStack = [], redoStack = [];
+
+const ballSelect = document.getElementById('ballSelect'), ballControl = document.getElementById('ballControl');
+const stepSizeInput = document.getElementById('stepSize'), stepSizeLabel = document.getElementById('stepSizeLabel');
+stepSizeLabel.textContent = stepSizeInput.value;
+
+/* utilities */
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+function distXY(x1,y1,x2,y2){return Math.hypot(x1-x2,y1-y2);}
+function nowSecs(){return performance.now()/1000;}
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+function lerp(a,b,t){ return a + (b-a)*t; }
+
+/* geometry helpers */
+function closestPointOnSegPoint(x,y,ax,ay,bx,by){
+  const vx = bx-ax, vy = by-ay; const denom = vx*vx + vy*vy || 0.000001;
+  const t = ((x-ax)*vx + (y-ay)*vy)/denom; const tt = clamp(t,0,1);
+  return { x: ax + vx*tt, y: ay + vy*tt, t: tt };
+}
+function closestPointOnSeg(p, seg) { return closestPointOnSegPoint(p.x,p.y,seg.ax,seg.ay,seg.bx,seg.by); }
+function pointToSegDist(p, seg){ const cp = closestPointOnSeg(p, seg); return distXY(p.x,p.y,cp.x,cp.y); }
+function pointInBox(p,b){ return p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h; }
+
+/* simplify polyline */
+function simplify(points, epsilon){
+  if(!points || points.length < 3) return points || [];
+  const idxToKeep = [0, points.length-1];
+  function pointLineDistance(p,a,b){ const A = p.x-a.x, B = p.y-a.y, C = b.x-a.x, D = b.y-a.y; const dot = A*C + B*D, len2 = C*C + D*D; const t = len2 ? clamp(dot/len2,0,1) : 0; const projx = a.x + C*t, projy = a.y + D*t; return Math.hypot(p.x-projx, p.y-projy); }
+  function rdp(s,e){ let maxd=0, index=-1; for(let i=s+1;i<e;i++){ const d = pointLineDistance(points[i], points[s], points[e]); if(d>maxd){ maxd=d; index=i; } } if(maxd>epsilon && index!==-1){ idxToKeep.push(index); rdp(s,index); rdp(index,e); } }
+  rdp(0, points.length-1);
+  idxToKeep.sort((a,b)=>a-b);
+  return idxToKeep.map(i => points[i]);
+}
+
+/* entity makers */
+function makeBall(x,y,r=12,control='mouse'){ const id='b'+(ballIdCounter++); return { id, x, y, r, vx:0, vy:0, teleportCooldown:0, lastTrampolineTime:0, control }; }
+function makeTrampoline(ax,ay,bx,by,strength=1.8){ const id='tp'+(trampolineIdCounter++); return { id, ax, ay, bx, by, strength: Number(strength) }; }
+function makePortal(x,y,angle=-Math.PI/2,tag='A'){ const id='p'+(portalIdCounter++); return { id,x,y,r:28,partnerId:null,angle,preserveVector:false,speedMultiplier:1.0,oneWay:false,tag }; }
+function makeMovingPlatform(sx,sy,ex,ey,w=120,h=18,speed=160,mode='pingpong'){ const id='m'+(movingPlatIdCounter++); const start={x:sx,y:sy}, end={x:ex,y:ey}, t=0, dir=1; const x=lerp(start.x,end.x,t), y=lerp(start.y,end.y,t); return { id, start, end, w, h, speed, mode, t, dir, x, y, vx:0, vy:0 }; }
+function makeTimedObstacle(x,y,w=120,h=40,period=2.0,onDuration=1.0,phase=0.0,enabled=true){ const id='to'+(timedIdCounter++); return { id, x, y, w, h, period:Number(period), onDuration:Number(onDuration), phase:Number(phase), enabled:!!enabled }; }
+
+/* collision helpers */
+function resolveCircleSegment(c, seg){
+  const cp = closestPointOnSeg({x:c.x,y:c.y}, seg);
+  const dx = c.x - cp.x, dy = c.y - cp.y;
+  const distSq = dx*dx + dy*dy, r = c.r;
+  if(distSq < r*r){
+    const dist = Math.sqrt(distSq) || 0.0001;
+    const nx = dx/dist, ny = dy/dist;
+    const penetration = r - dist;
+    c.x += nx*penetration; c.y += ny*penetration;
+    const vn = c.vx*nx + c.vy*ny;
+    const vt_x = c.vx - vn*nx, vt_y = c.vy - vn*ny;
+    const newVn = -vn * restitution;
+    c.vx = newVn*nx + vt_x*(1 - frictionGround);
+    c.vy = newVn*ny + vt_y*(1 - frictionGround);
+    return true;
+  }
+  return false;
+}
+function resolveBoxSegments(b, segs){
+  const corners = [{x:b.x,y:b.y},{x:b.x+b.w,y:b.y},{x:b.x,y:b.y+b.h},{x:b.x+b.w,y:b.y+b.h}];
+  corners.forEach(pt=>{
+    segs.forEach(seg=>{
+      const closest = closestPointOnSeg(pt, seg);
+      const dx = pt.x - closest.x, dy = pt.y - closest.y;
+      const d2 = dx*dx + dy*dy;
+      if(d2 < 4){
+        const d = Math.sqrt(d2) || 0.0001;
+        const nx = dx/d, ny = dy/d;
+        b.x += nx * 1; b.y += ny * 1;
+        const vn = (b.vx||0) * nx + (b.vy||0) * ny;
+        b.vx = (b.vx||0) - (1 + restitution) * vn * nx;
+        b.vy = (b.vy||0) - (1 + restitution) * vn * ny;
+      }
+    });
+  });
+}
+function resolveBallBox(c, b){
+  const closestX = clamp(c.x, b.x, b.x + b.w);
+  const closestY = clamp(c.y, b.y, b.y + b.h);
+  const dx = c.x - closestX, dy = c.y - closestY;
+  const dist2 = dx*dx + dy*dy;
+  if(dist2 < c.r * c.r){
+    const dist = Math.sqrt(dist2) || 0.0001;
+    const nx = dx/dist, ny = dy/dist;
+    const penetration = c.r - dist;
+    c.x += nx * penetration; c.y += ny * penetration;
+    const relVx = c.vx - (b.vx||0), relVy = c.vy - (b.vy||0);
+    const vn = relVx * nx + relVy * ny;
+    const impulse = -(1 + restitution) * vn;
+    c.vx += impulse * nx * 0.9; c.vy += impulse * ny * 0.9;
+    if(b.vx !== undefined && b.vy !== undefined){
+      b.vx -= impulse * nx * 0.2; b.vy -= impulse * ny * 0.2;
+    }
+  }
+}
+
+/* trampolines */
+const TRAMPOLINE_COOLDOWN = 0.06;
+function handleTrampoline(ball){
+  trampolines.forEach(t=>{
+    const cp = closestPointOnSegPoint(ball.x, ball.y, t.ax, t.ay, t.bx, t.by);
+    const dx = ball.x - cp.x, dy = ball.y - cp.y;
+    const dist2 = dx*dx + dy*dy;
+    if(dist2 < ball.r * ball.r){
+      if(ball.lastTrampolineTime && ball.lastTrampolineTime + TRAMPOLINE_COOLDOWN > nowSecs()) return;
+      const dist = Math.sqrt(dist2) || 0.0001;
+      const nx = dx/dist, ny = dy/dist;
+      const vn = ball.vx*nx + ball.vy*ny;
+      const vt_x = ball.vx - vn*nx, vt_y = ball.vy - vn*ny;
+      const vn_new = -vn * t.strength;
+      ball.vx = vn_new*nx + vt_x;
+      ball.vy = vn_new*ny + vt_y;
+      const penetration = ball.r - dist;
+      ball.x += nx * penetration; ball.y += ny * penetration;
+      ball.lastTrampolineTime = nowSecs();
+    }
+  });
+}
+
+/* moving platforms */
+function updateMovingPlatforms(dtReal){
+  movingPlatforms.forEach(mp=>{
+    const dx = mp.end.x - mp.start.x, dy = mp.end.y - mp.start.y;
+    const dist = Math.hypot(dx,dy) || 0.0001;
+    const deltaT = (mp.speed * dtReal) / dist;
+    let newT = mp.t + mp.dir * deltaT;
+    if(mp.mode === 'pingpong'){
+      if(newT > 1){ newT = 1 - (newT - 1); mp.dir = -mp.dir; }
+      if(newT < 0){ newT = -newT; mp.dir = -mp.dir; }
+    } else newT = ((newT % 1) + 1) % 1;
+    const nx = lerp(mp.start.x, mp.end.x, newT);
+    const ny = lerp(mp.start.y, mp.end.y, newT);
+    mp.vx = (nx - mp.x) / Math.max(1e-6, dtReal);
+    mp.vy = (ny - mp.y) / Math.max(1e-6, dtReal);
+    mp.x = nx; mp.y = ny; mp.t = newT;
+  });
+}
+
+/* portals */
+const PORTAL_COOLDOWN = 0.15;
+const SAFE_EXIT_OFFSET = 12 + 4;
+function handlePortalTeleportForBall(ball){
+  if(!portals || portals.length === 0) return;
+  if(ball.teleportCooldown && ball.teleportCooldown > nowSecs()) return;
+  for(const p of portals){
+    const d = distXY(ball.x, ball.y, p.x, p.y);
+    if(d < p.r + ball.r){
+      if(p.oneWay && p.tag === 'B') continue;
+      if(!p.partnerId) continue;
+      const partner = portals.find(pp=>pp.id===p.partnerId);
+      if(!partner) continue;
+      const ex = partner.x + Math.cos(partner.angle) * (partner.r + SAFE_EXIT_OFFSET);
+      const ey = partner.y + Math.sin(partner.angle) * (partner.r + SAFE_EXIT_OFFSET);
+      ball.x = ex; ball.y = ey;
+      const speed = Math.hypot(ball.vx, ball.vy) || 300;
+      if(!partner.preserveVector){
+        ball.vx = Math.cos(partner.angle) * speed * partner.speedMultiplier;
+        ball.vy = Math.sin(partner.angle) * speed * partner.speedMultiplier;
+      }
+      ball.teleportCooldown = nowSecs() + PORTAL_COOLDOWN;
+      ball.lastTeleported = partner.id;
+      return;
+    }
+  }
+}
+
+/* ball-ball collisions */
+function resolveBallBallCollision(a,b){
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const d2 = dx*dx + dy*dy;
+  const minDist = a.r + b.r;
+  if(d2 <= 0 || d2 > minDist*minDist) return;
+  const d = Math.sqrt(d2) || 0.0001;
+  const nx = dx / d, ny = dy / d;
+  const overlap = minDist - d;
+  const sep = overlap / 2;
+  a.x -= nx * sep; a.y -= ny * sep;
+  b.x += nx * sep; b.y += ny * sep;
+  const rvx = b.vx - a.vx, rvy = b.vy - a.vy;
+  const rel = rvx * nx + rvy * ny;
+  if(rel > 0) return;
+  const e = 0.8;
+  const j = -(1+e) * rel / 2;
+  a.vx -= j * nx; a.vy -= j * ny;
+  b.vx += j * nx; b.vy += j * ny;
+  a.vx = clamp(a.vx, -velocityCap, velocityCap); a.vy = clamp(a.vy, -velocityCap, velocityCap);
+  b.vx = clamp(b.vx, -velocityCap, velocityCap); b.vy = clamp(b.vy, -velocityCap, velocityCap);
+}
+
+/* simulation */
+function simulateStep(dtReal){
+  balls.forEach(ball=>{
+    ball.vy += gravity * dtReal;
+    ball.vx = clamp(ball.vx, -velocityCap, velocityCap);
+    ball.vy = clamp(ball.vy, -velocityCap, velocityCap);
+    ball.x += ball.vx * dtReal;
+    ball.y += ball.vy * dtReal;
+  });
+
+  boxes.forEach(b=>{ b.vy += gravity * dtReal; b.vx = clamp(b.vx,-velocityCap,velocityCap); b.vy = clamp(b.vy,-velocityCap,velocityCap); b.x += b.vx * dtReal; b.y += b.vy * dtReal; });
+
+  if(isPlaying) updateMovingPlatforms(dtReal);
+
+  balls.forEach(ball=>{
+    segments.forEach(seg=>resolveCircleSegment(ball, seg));
+    handleTrampoline(ball);
+    boxes.forEach(b=>{ resolveBoxSegments(b, segments); resolveBallBox(ball, b); });
+  });
+
+  movingPlatforms.forEach(mp=>{
+    const bobj = { x: mp.x - mp.w/2, y: mp.y - mp.h/2, w: mp.w, h: mp.h, vx: mp.vx, vy: mp.vy };
+    balls.forEach(ball => resolveBallBox(ball, bobj));
+    mp.vx = bobj.vx; mp.vy = bobj.vy;
+  });
+
+  timedObstacles.forEach(t=>{
+    if(timedIsActive(t)){
+      const bobj = { x: t.x - t.w/2, y: t.y - t.h/2, w: t.w, h: t.h, vx:0, vy:0 };
+      balls.forEach(ball => resolveBallBox(ball, bobj));
+    }
+  });
+
+  balls.forEach(ball => handlePortalTeleportForBall(ball));
+
+  for(let i=0;i<balls.length;i++) for(let j=i+1;j<balls.length;j++) resolveBallBallCollision(balls[i], balls[j]);
+
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  balls.forEach(ball=>{
+    if(ball.x < ball.r){ ball.x = ball.r; ball.vx = -ball.vx * restitution; }
+    if(ball.x > W - ball.r){ ball.x = W - ball.r; ball.vx = -ball.vx * restitution; }
+    if(ball.y < ball.r){ ball.y = ball.r; ball.vy = -ball.vy * restitution; }
+    if(ball.y > H + 300){ isPlaying = false; document.getElementById('status').innerText = 'Mode: Edit'; }
+    if(ball.teleportCooldown && ball.teleportCooldown <= nowSecs()) ball.teleportCooldown = 0;
+  });
+
+  boxes.forEach(b=>{
+    if(b.x < -500) b.x = -500, b.vx = 0;
+    if(b.x + b.w > W + 500) b.x = W + 500 - b.w, b.vx *= -restitution;
+    if(b.y > H + 500) b.y = H + 500, b.vy = 0, b.vx = 0;
+  });
+
+  const coopMode = document.getElementById('coopMode').checked;
+  if(balls.length){
+    if(coopMode){
+      const allInside = balls.every(b => distXY(b.x,b.y,goal.x,goal.y) < b.r + goal.r);
+      if(allInside){ isPlaying = false; document.getElementById('status').innerText = 'You win! (Co-op) ★ Mode: Edit'; }
+    } else {
+      const anyInside = balls.some(b => distXY(b.x,b.y,goal.x,goal.y) < b.r + goal.r);
+      if(anyInside){ isPlaying = false; document.getElementById('status').innerText = 'You win! ★ Mode: Edit'; }
+    }
+  }
+}
+
+/* timed helper */
+function timedIsActive(t){
+  if(!t.enabled) return false;
+  const p = Math.max(0.000001, Number(t.period) || 1.0);
+  const on = clamp(Number(t.onDuration) || 0, 0, p);
+  const ph = Number(t.phase) || 0;
+  const val = ((nowSecs() + ph) % p + p) % p;
+  return val < on;
+}
+
+/* drawing */
+function drawGrid(){ const W=canvas.clientWidth, H=canvas.clientHeight; ctx.save(); ctx.globalAlpha=0.06; ctx.lineWidth=1; ctx.strokeStyle='#031f27'; const gap=48; for(let x=0;x<W;x+=gap){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); } for(let y=0;y<H;y+=gap){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); } ctx.restore(); }
+
+function drawPortals(){
+  for(const p of portals){
+    ctx.save();
+    const isA = p.tag === 'A';
+    ctx.fillStyle = isA ? 'rgba(77,208,225,0.08)' : 'rgba(255,184,107,0.08)';
+    ctx.strokeStyle = isA ? '#4dd0e1' : '#ffb86b';
+    ctx.lineWidth = (p.id === selectedPortalId) ? 5 : 3;
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill(); ctx.stroke();
+    const ax = p.x + Math.cos(p.angle) * (p.r - 6);
+    const ay = p.y + Math.sin(p.angle) * (p.r - 6);
+    const bx = p.x + Math.cos(p.angle) * (p.r + 10);
+    const by = p.y + Math.sin(p.angle) * (p.r + 10);
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+    const ah1x = bx + Math.cos(p.angle + Math.PI * 0.6) * 8;
+    const ah1y = by + Math.sin(p.angle + Math.PI * 0.6) * 8;
+    const ah2x = bx + Math.cos(p.angle - Math.PI * 0.6) * 8;
+    const ah2y = by + Math.sin(p.angle - Math.PI * 0.6) * 8;
+    ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(ah1x, ah1y); ctx.lineTo(ah2x, ah2y); ctx.closePath();
+    ctx.fillStyle = ctx.strokeStyle; ctx.fill();
+    ctx.fillStyle = '#cfeeff'; ctx.font = '11px system-ui'; ctx.fillText(p.id, p.x - 10, p.y + 4);
+    ctx.beginPath(); ctx.fillStyle = '#ffffff'; ctx.arc(bx, by, 6, 0, Math.PI*2); ctx.fill();
+    ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawMovingPlatforms(){
+  for(const mp of movingPlatforms){
+    ctx.save();
+    ctx.strokeStyle = 'rgba(122,162,214,0.5)'; ctx.lineWidth = 1.5; ctx.setLineDash([6,4]);
+    ctx.beginPath(); ctx.moveTo(mp.start.x, mp.start.y); ctx.lineTo(mp.end.x, mp.end.y); ctx.stroke();
+    ctx.setLineDash([]);
+    const x = mp.x - mp.w/2, y = mp.y - mp.h/2;
+    ctx.fillStyle = '#7aa2d6'; ctx.strokeStyle = '#3a6d9a'; ctx.lineWidth = 2;
+    ctx.fillRect(x,y,mp.w,mp.h); ctx.strokeRect(x,y,mp.w,mp.h);
+    ctx.fillStyle = '#cfeeff'; ctx.font = '11px system-ui'; ctx.fillText(mp.id + ' • ' + Math.round(mp.speed) + 'px/s', x+6, y+14);
+    ctx.restore();
+  }
+}
+
+function drawTrampolines(){
+  for(const t of trampolines){
+    const ax = t.ax, ay = t.ay, bx = t.bx, by = t.by;
+    const segs = 8; const dx = (bx-ax)/segs, dy=(by-ay)/segs;
+    const perpX = -(by - ay), perpY = (bx - ax);
+    const plen = Math.hypot(perpX, perpY) || 1; const nx = perpX/plen, ny = perpY/plen;
+    const amp = 8;
+    ctx.save();
+    ctx.lineWidth = 3; ctx.strokeStyle = '#7efec5';
+    ctx.beginPath();
+    for(let i=0;i<=segs;i++){
+      const px = ax + dx*i, py = ay + dy*i;
+      const sign = (i%2===0)?1:-1;
+      const sx = px + nx*amp*sign, sy = py + ny*amp*sign;
+      if(i===0) ctx.moveTo(sx,sy); else ctx.lineTo(sx,sy);
+    }
+    ctx.stroke();
+    const mx = (ax+bx)/2, my=(ay+by)/2;
+    ctx.fillStyle = '#cfeeff'; ctx.font = '12px system-ui'; ctx.fillText(t.id + ' • ' + t.strength.toFixed(1) + 'x', mx + 8, my - 6);
+    ctx.restore();
+  }
+}
+
+function drawTimedObstacles(){
+  const now = nowSecs();
+  for(const t of timedObstacles){
+    const active = timedIsActive(t);
+    ctx.save();
+    ctx.globalAlpha = active ? 1.0 : 0.28;
+    if(active){
+      const pulse = 0.06 * (1 + Math.sin(now*12 + (t.phase||0)));
+      ctx.fillStyle = `rgba(255,80,80,${0.9 + pulse})`;
+    } else ctx.fillStyle = 'rgba(180,80,80,0.5)';
+    const x = t.x - t.w/2, y = t.y - t.h/2;
+    ctx.fillRect(x,y,t.w,t.h);
+    ctx.lineWidth = 2; ctx.strokeStyle = active ? '#ffb4b4' : '#7a3b3b';
+    ctx.strokeRect(x,y,t.w,t.h);
+    ctx.fillStyle = '#fff'; ctx.font = '12px system-ui'; ctx.fillText(t.id, x+6, y+16);
+    const barW = Math.max(20, t.w - 12);
+    const barX = x + 6, barY = y + t.h - 14, barH = 6;
+    ctx.globalAlpha = active ? 0.95 : 0.5;
+    ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
+    const p = Math.max(0.000001, Number(t.period) || 1.0);
+    const on = clamp(Number(t.onDuration) || 0, 0, p);
+    const ph = Number(t.phase) || 0;
+    const val = ((now + ph) % p + p) % p;
+    const filled = Math.min(1, Math.max(0, val / p));
+    ctx.fillStyle = active ? 'rgba(255,220,220,0.9)' : 'rgba(255,180,180,0.7)';
+    ctx.fillRect(barX, barY, barW * filled, barH);
+    ctx.globalAlpha = 0.18; ctx.fillStyle = '#ffffff'; ctx.fillRect(barX, barY, barW * (on / p), barH);
+    ctx.restore();
+  }
+}
+
+function draw(){
+  resizeCanvasToDisplay();
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  ctx.clearRect(0,0,W,H);
+  drawGrid();
+  drawPortals();
+  drawMovingPlatforms();
+  drawTrampolines();
+  drawTimedObstacles();
+  ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.strokeStyle = '#9fbbe8';
+  segments.forEach(s=>{ ctx.beginPath(); ctx.moveTo(s.ax,s.ay); ctx.lineTo(s.bx,s.by); ctx.stroke(); });
+  boxes.forEach(b=>{ ctx.beginPath(); ctx.fillStyle = '#254e74'; ctx.fillRect(b.x,b.y,b.w,b.h); ctx.strokeStyle='#1b3650'; ctx.lineWidth=2; ctx.strokeRect(b.x,b.y,b.w,b.h); });
+
+  balls.forEach(b=>{
+    ctx.beginPath();
+    let fill = '#f59e0b';
+    if(b.control === 'wasd') fill = '#60a5fa';
+    if(b.control === 'arrows') fill = '#f472b6';
+    ctx.fillStyle = fill; ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.fill();
+    ctx.lineWidth = (selectedBallId === b.id) ? 3 : 2;
+    ctx.strokeStyle = (selectedBallId === b.id) ? '#ffffff' : '#ad6a05'; ctx.stroke();
+    ctx.fillStyle = '#ffffff'; ctx.font='11px system-ui'; ctx.fillText(b.id, b.x - 8, b.y + 4);
+  });
+
+  ctx.save(); ctx.globalAlpha=0.12; ctx.beginPath(); ctx.fillStyle='#10b981'; ctx.arc(goal.x,goal.y,goal.r+6,0,Math.PI*2); ctx.fill(); ctx.globalAlpha=1; ctx.beginPath(); ctx.fillStyle='#10b981'; ctx.arc(goal.x,goal.y,goal.r,0,Math.PI*2); ctx.fill(); ctx.restore();
+
+  ctx.save(); ctx.fillStyle='rgba(0,0,0,0.25)'; ctx.fillRect(8,8,760,64);
+  ctx.fillStyle='#cfeeff'; ctx.font='13px system-ui'; ctx.fillText('Physics Puzzler — Converted Save', 18, 28);
+  ctx.fillStyle='#9fbbe8'; ctx.font='12px system-ui'; ctx.fillText('Level loaded from your converted save. All tools enabled.', 18, 46);
+  ctx.restore();
+}
+
+/* pointer interactions (same handlers as full build) */
+function getMousePos(e){ const rect = canvas.getBoundingClientRect(); return { x: (e.clientX - rect.left), y: (e.clientY - rect.top) }; }
+
+canvas.addEventListener('pointerdown', e=>{
+  const p = getMousePos(e); isDown = true;
+  if(mode === 'portal'){
+    for(const pp of portals){
+      const hx = pp.x + Math.cos(pp.angle) * (pp.r + 10);
+      const hy = pp.y + Math.sin(pp.angle) * (pp.r + 10);
+      if(distXY(p.x,p.y,hx,hy) < 10){ rotatingPortal = { id: pp.id, prevAngle: pp.angle }; isRotating = true; selectedPortalId = pp.id; updatePortalInspector(true); draw(); return; }
+    }
+    for(const pp of portals){ if(distXY(p.x,p.y,pp.x,pp.y) < pp.r + 6){ selectedPortalId = pp.id; updatePortalInspector(false); draw(); return; } }
+    if(!placingPortalFirst){ const pA = makePortal(p.x,p.y,-Math.PI/2,'A'); portals.push(pA); placingPortalFirst = pA; selectedPortalId = pA.id; updatePortalInspector(false); draw(); return; }
+    else { const pB = makePortal(p.x,p.y,-Math.PI/2,'B'); portals.push(pB); placingPortalFirst.partnerId = pB.id; pB.partnerId = placingPortalFirst.id; const saved = clone([placingPortalFirst, pB]); pushUndo({ type:'placePortals', ids: saved.map(s=>s.id), portalObjs: saved }); clearRedo(); placingPortalFirst = null; selectedPortalId = pB.id; updatePortalInspector(false); draw(); return; }
+  }
+
+  if(mode === 'moveplat'){
+    const idx = movingPlatforms.findIndex(mp=> distXY(p.x,p.y,mp.x,mp.y) < Math.max(mp.w, mp.h));
+    if(idx >= 0){ selectedMovingPlatId = movingPlatforms[idx].id; updateMovingPlatInspector(); draw(); return; }
+    if(!placingMovingPlatFirst){ placingMovingPlatFirst = { x:p.x, y:p.y }; draw(); return; }
+    else { const start = placingMovingPlatFirst; const plat = makeMovingPlatform(start.x,start.y,p.x,p.y); movingPlatforms.push(plat); pushUndo({ type:'placeMovingPlat', id: plat.id, platObj: clone([plat])[0] }); clearRedo(); placingMovingPlatFirst = null; selectedMovingPlatId = plat.id; updateMovingPlatInspector(); draw(); return; }
+  }
+
+  if(mode === 'trampoline'){
+    const nearIdx = trampolines.findIndex(t=>{ const mx = (t.ax + t.bx)/2, my = (t.ay + t.by)/2; return distXY(p.x,p.y,mx,my) < 36; });
+    if(nearIdx >= 0){ selectedTrampolineId = trampolines[nearIdx].id; updateTrampInspector(); draw(); return; }
+    if(!placingTrampolineFirst){ placingTrampolineFirst = { x:p.x, y:p.y }; draw(); return; }
+    else { const start = placingTrampolineFirst; const tramp = makeTrampoline(start.x,start.y,p.x,p.y,1.8); trampolines.push(tramp); pushUndo({ type:'placeTrampoline', id: tramp.id, trampObj: clone([tramp])[0] }); clearRedo(); placingTrampolineFirst = null; selectedTrampolineId = tramp.id; updateTrampInspector(); draw(); return; }
+  }
+
+  if(mode === 'timed'){
+    const nearIdx = timedObstacles.findIndex(t => distXY(p.x,p.y,t.x,t.y) < Math.max(40, Math.max(t.w,t.h)/2 + 12));
+    if(nearIdx >= 0){ selectedTimedId = timedObstacles[nearIdx].id; updateTimedInspector(); draw(); return; }
+    const t = makeTimedObstacle(p.x, p.y, 120, 40, 2.0, 1.0, 0.0, true);
+    timedObstacles.push(t); pushUndo({ type:'placeTimed', id: t.id, obj: clone([t])[0] }); clearRedo(); selectedTimedId = t.id; updateTimedInspector(); draw(); return;
+  }
+
+  if(mode === 'erase'){
+    const portalIdx = portals.findIndex(pp => distXY(p.x,p.y,pp.x,pp.y) < pp.r + 6);
+    if(portalIdx >= 0){ const removed = portals.splice(portalIdx,1); if(removed[0].partnerId){ const pr = portals.find(pp=>pp.id===removed[0].partnerId); if(pr) pr.partnerId = null; } pushUndo({ type:'erasePortal', portals: clone(removed), ids: removed.map(o=>o.id) }); clearRedo(); draw(); return; }
+    const platIdx = movingPlatforms.findIndex(mp=> distXY(p.x,p.y,mp.x,mp.y) < Math.max(mp.w, mp.h));
+    if(platIdx >= 0){ const removed = movingPlatforms.splice(platIdx,1); pushUndo({ type:'eraseMovingPlat', plats: clone(removed), ids: removed.map(o=>o.id) }); clearRedo(); draw(); return; }
+    const trampIdx = trampolines.findIndex(t=> { const mx=(t.ax+t.bx)/2, my=(t.ay+t.by)/2; return distXY(p.x,p.y,mx,my) < 36; });
+    if(trampIdx >= 0){ const removed = trampolines.splice(trampIdx,1); pushUndo({ type:'eraseTrampoline', tramps: clone(removed), ids: removed.map(o=>o.id) }); clearRedo(); draw(); return; }
+    const toIdx = timedObstacles.findIndex(t=> distXY(p.x,p.y,t.x,t.y) < Math.max(40, Math.max(t.w,t.h)/2 + 12));
+    if(toIdx >= 0){ const removed = timedObstacles.splice(toIdx,1); pushUndo({ type:'eraseTimed', items: clone(removed), ids: removed.map(o=>o.id) }); clearRedo(); draw(); return; }
+    const ballIdx = balls.findIndex(b => distXY(p.x,p.y,b.x,b.y) < b.r + 6);
+    if(ballIdx >= 0){ const removed = balls.splice(ballIdx,1); pushUndo({ type:'removeBall', items: clone(removed) }); clearRedo(); if(balls.length) selectedBallId = balls[0].id; else selectedBallId = null; refreshBallSelect(); draw(); return; }
+    for(let i = segments.length-1; i>=0; i--){ if(pointToSegDist({x:p.x,y:p.y}, segments[i]) < 10){ pushUndo({ type:'eraseSegment', index:i, seg:segments[i] }); segments.splice(i,1); clearRedo(); draw(); return; } }
+    for(let i = boxes.length-1; i>=0; i--){ if(pointInBox({x:p.x,y:p.y}, boxes[i])){ pushUndo({ type:'eraseBox', index:i, box:boxes[i] }); boxes.splice(i,1); clearRedo(); draw(); return; } }
+    return;
+  }
+
+  if(mode === 'place'){ const box = { x: p.x - 28, y: p.y - 16, w:56, h:32, vx:0, vy:0 }; boxes.push(box); pushUndo({ type:'placeBox', item: box }); clearRedo(); draw(); return; }
+
+  if(mode === 'ball'){
+    const clickedBallIdx = balls.findIndex(b => distXY(p.x,p.y,b.x,b.y) < b.r + 6);
+    if(clickedBallIdx >= 0){
+      selectedBallId = balls[clickedBallIdx].id; refreshBallSelect();
+      if(balls[clickedBallIdx].control === 'mouse' || mode === 'ball'){
+        mouseDragAssignedBall = selectedBallId; dragBallPrev = { x: balls[clickedBallIdx].x, y: balls[clickedBallIdx].y }; draggingBall = true;
+        balls[clickedBallIdx].x = p.x; balls[clickedBallIdx].y = p.y; balls[clickedBallIdx].vx = balls[clickedBallIdx].vy = 0; draw(); return;
+      }
+    } else {
+      if(e.shiftKey){ const nb = addBallAt(p.x,p.y,'mouse'); selectedBallId = nb.id; refreshBallSelect(); draw(); return; }
+    }
+  }
+
+  if(mode === 'goal'){ dragGoalPrev = { x:goal.x, y:goal.y }; draggingGoal = true; goal.x = p.x; goal.y = p.y; clampGoalToCanvas(); draw(); return; }
+
+  if(mode === 'draw'){ drawBuffer = [p]; return; }
+});
+
+canvas.addEventListener('pointermove', e=>{
+  if(!isDown) return;
+  const p = getMousePos(e);
+  if(isRotating && rotatingPortal){ const pObj = portals.find(pp=>pp.id===rotatingPortal.id); if(!pObj) return; const angle = Math.atan2(p.y - pObj.y, p.x - pObj.x); pObj.angle = angle; updatePortalInspector(true); draw(); return; }
+  if(mode === 'draw'){ const last = drawBuffer[drawBuffer.length - 1]; if(!last || distXY(last.x,last.y,p.x,p.y) > 6) drawBuffer.push(p); return; }
+  if(mouseDragAssignedBall && draggingBall){
+    const b = balls.find(bb=>bb.id === mouseDragAssignedBall); if(!b) return; b.x = p.x; b.y = p.y; b.vx = b.vy = 0; draw(); return;
+  }
+  if(mode === 'ball' && draggingBall && selectedBallId){
+    const b = balls.find(bb=>bb.id === selectedBallId); if(!b) return; b.x = p.x; b.y = p.y; b.vx = b.vy = 0; draw(); return;
+  }
+  if(mode === 'goal' && draggingGoal){ goal.x = p.x; goal.y = p.y; clampGoalToCanvas(); draw(); return; }
+});
+
+canvas.addEventListener('pointerup', e=>{
+  const p = getMousePos(e); isDown = false;
+  if(isRotating && rotatingPortal){ const pObj = portals.find(pp=>pp.id===rotatingPortal.id); if(pObj){ const prev = rotatingPortal.prevAngle, next = pObj.angle; if(Math.abs(prev - next) > 0.0005) pushUndo({ type:'rotatePortal', id: pObj.id, prevAngle: prev, nextAngle: next }); clearRedo(); } rotatingPortal = null; isRotating = false; draw(); return; }
+  if(mode === 'draw' && drawBuffer.length > 1){ const simplified = simplify(drawBuffer, 2); const inserted = []; for(let i=1;i<simplified.length;i++){ const seg = { ax: simplified[i-1].x, ay: simplified[i-1].y, bx: simplified[i].x, by: simplified[i].y }; segments.push(seg); inserted.push(seg); } if(inserted.length){ pushUndo({ type:'draw', segs: inserted }); clearRedo(); } drawBuffer = []; return; }
+  if(draggingBall && mouseDragAssignedBall){
+    const prev = dragBallPrev || {x:0,y:0}, b = balls.find(bb=>bb.id===mouseDragAssignedBall);
+    if(b) pushUndo({ type:'moveBall', id: b.id, prev, next:{ x: b.x, y: b.y } });
+    clearRedo(); draggingBall=false; mouseDragAssignedBall=null; dragBallPrev=null; draw(); return;
+  }
+  if(draggingBall && selectedBallId){
+    const prev = dragBallPrev || {x:0,y:0}, b = balls.find(bb=>bb.id===selectedBallId);
+    if(b) pushUndo({ type:'moveBall', id: b.id, prev, next:{ x: b.x, y: b.y } });
+    clearRedo(); draggingBall=false; dragBallPrev=null; draw(); return;
+  }
+  if(draggingGoal){ const prev = dragGoalPrev || { x:goal.x, y:goal.y }; pushUndo({ type:'moveGoal', prev, next: { x: goal.x, y: goal.y } }); clearRedo(); draggingGoal=false; dragGoalPrev=null; draw(); return; }
+});
+
+/* keyboard */
+window.addEventListener('keydown', (e)=>{
+  const activeTag = document.activeElement && document.activeElement.tagName.toLowerCase();
+  const ignoreWhenTyping = (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select');
+  if(e.key === ' ' && !ignoreWhenTyping){ if(isPlaying) pause(); else play(); e.preventDefault(); return; }
+  if((e.key === 'z' || e.key === 'Z') && (e.ctrlKey||e.metaKey)){ undoLast(); e.preventDefault(); return; }
+  if((e.key === 'y' || e.key === 'Y') && (e.ctrlKey||e.metaKey)){ redoLast(); e.preventDefault(); return; }
+  if(e.key === 'Tab'){ e.preventDefault(); mode = (mode === 'ball') ? 'goal' : 'ball'; document.querySelectorAll('.tool').forEach(x => x.classList.toggle('active', x.dataset.tool === mode)); document.getElementById('status').innerText = 'Mode: ' + (isPlaying ? 'Play' : (mode ? mode.charAt(0).toUpperCase()+mode.slice(1) : 'Edit')); return; }
+  if(ignoreWhenTyping) return;
+
+  const arrowsBall = balls.find(b=>b.control==='arrows');
+  const wasdBall = balls.find(b=>b.control==='wasd');
+
+  const arrows = ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'];
+  if(arrows.includes(e.key)){
+    e.preventDefault();
+    const step = Number(stepSizeInput.value)||12;
+    if(arrowsBall){
+      const prev={x:arrowsBall.x,y:arrowsBall.y};
+      if(e.key==='ArrowLeft') arrowsBall.x -= step;
+      if(e.key==='ArrowRight') arrowsBall.x += step;
+      if(e.key==='ArrowUp') arrowsBall.y -= step;
+      if(e.key==='ArrowDown') arrowsBall.y += step;
+      arrowsBall.vx = arrowsBall.vy = 0; pushUndo({ type:'moveBall', id: arrowsBall.id, prev, next:{ x: arrowsBall.x, y: arrowsBall.y } }); clearRedo(); draw();
+    } else {
+      const sel = balls.find(b=>b.id===selectedBallId);
+      if(sel){ const prev={x:sel.x,y:sel.y}; if(e.key==='ArrowLeft') sel.x -= step; if(e.key==='ArrowRight') sel.x += step; if(e.key==='ArrowUp') sel.y -= step; if(e.key==='ArrowDown') sel.y += step; sel.vx=sel.vy=0; pushUndo({ type:'moveBall', id: sel.id, prev, next:{x:sel.x,y:sel.y} }); clearRedo(); draw(); }
+    }
+    return;
+  }
+
+  if(['w','a','s','d','W','A','S','D'].includes(e.key)){
+    if(wasdBall){ e.preventDefault(); const step = Number(stepSizeInput.value)||12; const prev={x:wasdBall.x,y:wasdBall.y}; if(e.key==='a'||e.key==='A') wasdBall.x -= step; if(e.key==='d'||e.key==='D') wasdBall.x += step; if(e.key==='w'||e.key==='W') wasdBall.y -= step; if(e.key==='s'||e.key==='S') wasdBall.y += step; wasdBall.vx=wasdBall.vy=0; pushUndo({ type:'moveBall', id: wasdBall.id, prev, next:{ x: wasdBall.x, y: wasdBall.y } }); clearRedo(); draw(); }
+    return;
+  }
+});
+
+/* UI wiring (play/pause/reset/step/undo/redo/clear) */
+document.getElementById('playBtn').addEventListener('click', ()=>play());
+document.getElementById('pauseBtn').addEventListener('click', ()=>pause());
+document.getElementById('stepBtn').addEventListener('click', ()=>{ pause(); simulateStep(dt); draw(); });
+document.getElementById('resetBtn').addEventListener('click', ()=>resetLevel());
+document.getElementById('undoBtn').addEventListener('click', ()=>undoLast());
+document.getElementById('redoBtn').addEventListener('click', ()=>redoLast());
+document.getElementById('clearBtn').addEventListener('click', ()=>clearWorld());
+
+document.querySelectorAll('.tool').forEach(el=>el.addEventListener('click', ()=>{
+  mode = el.dataset.tool;
+  document.querySelectorAll('.tool').forEach(x => x.classList.toggle('active', x === el));
+  document.getElementById('multiBallPanel').style.display = (mode === 'multiball') ? 'block' : 'none';
+  if(mode !== 'portal') document.getElementById('portalInspector').style.display='none';
+  if(mode !== 'moveplat') document.getElementById('movePlatInspector').style.display='none';
+  if(mode !== 'trampoline') document.getElementById('trampInspector').style.display='none';
+  if(mode !== 'timed') document.getElementById('timedInspector').style.display='none';
+  selectedPortalId = selectedMovingPlatId = selectedTrampolineId = selectedTimedId = null;
+  document.getElementById('status').innerText = 'Mode: ' + (isPlaying ? 'Play' : (mode ? mode.charAt(0).toUpperCase()+mode.slice(1) : 'Edit'));
+}));
+
+/* nudge & goal nudges */
+document.getElementById('nudgeLeft').addEventListener('click', ()=>nudgeSelectedBall(-12,0));
+document.getElementById('nudgeRight').addEventListener('click', ()=>nudgeSelectedBall(12,0));
+document.getElementById('nudgeUp').addEventListener('click', ()=>nudgeSelectedBall(0,-12));
+document.getElementById('nudgeDown').addEventListener('click', ()=>nudgeSelectedBall(0,12));
+document.getElementById('goalLeft').addEventListener('click', ()=>{ const prev={x:goal.x,y:goal.y}; goal.x -= 12; clampGoalToCanvas(); pushUndo({ type:'moveGoal', prev, next:{x:goal.x,y:goal.y} }); clearRedo(); draw(); });
+document.getElementById('goalRight').addEventListener('click', ()=>{ const prev={x:goal.x,y:goal.y}; goal.x += 12; clampGoalToCanvas(); pushUndo({ type:'moveGoal', prev, next:{x:goal.x,y:goal.y} }); clearRedo(); draw(); });
+document.getElementById('goalUp').addEventListener('click', ()=>{ const prev={x:goal.x,y:goal.y}; goal.y -= 12; clampGoalToCanvas(); pushUndo({ type:'moveGoal', prev, next:{x:goal.x,y:goal.y} }); clearRedo(); draw(); });
+document.getElementById('goalDown').addEventListener('click', ()=>{ const prev={x:goal.x,y:goal.y}; goal.y += 12; clampGoalToCanvas(); pushUndo({ type:'moveGoal', prev, next:{x:goal.x,y:goal.y} }); clearRedo(); draw(); });
+
+function nudgeSelectedBall(dx,dy){
+  const sel = balls.find(b=>b.id===selectedBallId) || balls[0];
+  if(!sel) return;
+  const prev={x:sel.x,y:sel.y};
+  sel.x += dx; sel.y += dy; sel.vx = sel.vy = 0;
+  pushUndo({ type:'moveBall', id: sel.id, prev, next:{x:sel.x,y:sel.y} }); clearRedo(); draw();
+}
+
+/* sliders */
+document.getElementById('grav').addEventListener('input', e=>{ gravity = +e.target.value; document.getElementById('gravVal').innerText = gravity; });
+document.getElementById('cap').addEventListener('input', e=>{ velocityCap = +e.target.value; document.getElementById('capVal').innerText = velocityCap; });
+
+/* Quick Save/Load/Export/Import wiring */
+function makeSaveObject(){
+  return {
+    version:3,
+    created: new Date().toISOString(),
+    segments: clone(segments),
+    boxes: clone(boxes),
+    balls: clone(balls),
+    startBalls: clone(startBalls),
+    goal: clone(goal),
+    gravity, velocityCap,
+    portals: clone(portals),
+    movingPlatforms: clone(movingPlatforms),
+    trampolines: clone(trampolines),
+    timedObstacles: clone(timedObstacles)
+  };
+}
+function loadSceneFromObject(obj){
+  if(!obj || typeof obj !== 'object'){ alert('Invalid save data'); return; }
+  segments = clone(obj.segments || []);
+  boxes = clone(obj.boxes || []);
+  balls = clone(obj.balls || []);
+  balls.forEach(b=>{ b.teleportCooldown = 0; b.lastTrampolineTime = 0; if(!b.control) b.control = 'mouse'; });
+  startBalls = clone(obj.startBalls || obj.balls || balls);
+  selectedBallId = balls[0] && balls[0].id || null;
+  goal = clone(obj.goal || goal);
+  if(typeof obj.gravity === 'number') gravity = obj.gravity;
+  if(typeof obj.velocityCap === 'number') velocityCap = obj.velocityCap;
+  portals = clone(obj.portals || []);
+  movingPlatforms = clone(obj.movingPlatforms || []);
+  movingPlatforms.forEach(mp => { mp.x = lerp(mp.start.x, mp.end.x, mp.t||0); mp.y = lerp(mp.start.y, mp.end.y, mp.t||0); mp.vx = mp.vy = 0; });
+  trampolines = clone(obj.trampolines || []);
+  timedObstacles = clone(obj.timedObstacles || []);
+  document.getElementById('grav').value = gravity; document.getElementById('gravVal').innerText = gravity;
+  document.getElementById('cap').value = velocityCap; document.getElementById('capVal').innerText = velocityCap;
+  refreshBallSelect(); updateBallControlSelect(); draw();
+}
+
+document.getElementById('quickSaveBtn').addEventListener('click', ()=>{ try{ localStorage.setItem('physics-puzzler-quicksave', JSON.stringify(makeSaveObject())); alert('Quick saved ✔'); } catch(err){ alert('Quick save failed: '+err); }});
+document.getElementById('quickLoadBtn').addEventListener('click', ()=>{ try{ const raw = localStorage.getItem('physics-puzzler-quicksave'); if(!raw){ alert('No quick save found'); return; } loadSceneFromObject(JSON.parse(raw)); alert('Quick loaded ✔'); } catch(err){ alert('Quick load failed: '+err); }});
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  try{ const obj = makeSaveObject(); const text = JSON.stringify(obj, null, 2); const blob = new Blob([text], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'physics-puzzler-' + new Date().toISOString().slice(0,19).replace(/[:T]/g,'-') + '.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); alert('Exported JSON ✔'); } catch(err){ alert('Export failed: '+err); }
+});
+document.getElementById('importFile').addEventListener('change', (e)=>{
+  const file = e.target.files && e.target.files[0]; e.target.value=''; if(!file) return; const reader = new FileReader();
+  reader.onload = ()=>{ try{ const obj = JSON.parse(reader.result); loadSceneFromObject(obj); alert('Imported file ✔'); } catch(err){ alert('Failed to parse JSON: '+err); } };
+  reader.onerror = ()=>alert('Failed to read file'); reader.readAsText(file);
+});
+
+/* portal inspector wiring */
+const inspector = document.getElementById('portalInspector');
+const inspectorTitle = document.getElementById('inspectorTitle'), inspectorTag = document.getElementById('inspectorTag');
+const inspectorAngle = document.getElementById('inspectorAngle'), inspectorAngleLabel = document.getElementById('inspectorAngleLabel');
+const inspectorPreserve = document.getElementById('inspectorPreserve'), inspectorSpeed = document.getElementById('inspectorSpeed'), inspectorOneWay = document.getElementById('inspectorOneWay');
+document.getElementById('inspectorDeselect').addEventListener('click', ()=>{ selectedPortalId = null; inspector.style.display='none'; draw(); });
+
+function updatePortalInspector(live=false){
+  const p = portals.find(pp=>pp.id===selectedPortalId);
+  if(!p){ inspector.style.display='none'; return; }
+  inspector.style.display='block';
+  inspectorTitle.textContent = p.id;
+  inspectorTag.textContent = '(' + (p.tag||'A') + ')';
+  const deg = Math.round(p.angle * 180/Math.PI);
+  inspectorAngle.value = ((deg + 180) % 360) - 180;
+  inspectorAngleLabel.textContent = inspectorAngle.value + '°';
+  inspectorPreserve.checked = !!p.preserveVector;
+  inspectorSpeed.value = p.speedMultiplier || 1.0;
+  inspectorOneWay.checked = !!p.oneWay;
+}
+
+inspectorAngle.addEventListener('input', ()=>{
+  const p = portals.find(pp=>pp.id===selectedPortalId); if(!p) return;
+  p.angle = Number(inspectorAngle.value) * Math.PI/180; inspectorAngleLabel.textContent = inspectorAngle.value + '°'; draw();
+});
+inspectorAngle.addEventListener('pointerup', ()=>{
+  const p = portals.find(pp=>pp.id===selectedPortalId); if(!p) return;
+  pushUndo({ type:'portalPropChange', id: p.id, prev: null, next: clone(p) }); clearRedo();
+});
+inspectorPreserve.addEventListener('change', ()=>{ const p = portals.find(pp=>pp.id===selectedPortalId); if(!p) return; const prev = clone(p); p.preserveVector = inspectorPreserve.checked; pushUndo({ type:'portalPropChange', id: p.id, prev, next: clone(p) }); clearRedo(); draw(); });
+inspectorSpeed.addEventListener('change', ()=>{ const p = portals.find(pp=>pp.id===selectedPortalId); if(!p) return; const prev = clone(p); p.speedMultiplier = Number(inspectorSpeed.value)||1.0; pushUndo({ type:'portalPropChange', id: p.id, prev, next: clone(p) }); clearRedo(); draw(); });
+inspectorOneWay.addEventListener('change', ()=>{ const p = portals.find(pp=>pp.id===selectedPortalId); if(!p) return; const prev = clone(p); p.oneWay = inspectorOneWay.checked; pushUndo({ type:'portalPropChange', id: p.id, prev, next: clone(p) }); clearRedo(); draw(); });
+
+/* moving platform inspector */
+const mpInspector = document.getElementById('movePlatInspector');
+const mpTitle = document.getElementById('mpTitle'), mpWidth = document.getElementById('mpWidth'), mpHeight = document.getElementById('mpHeight'), mpSpeed = document.getElementById('mpSpeed'), mpMode = document.getElementById('mpMode');
+document.getElementById('mpDeselect').addEventListener('click', ()=>{ selectedMovingPlatId = null; mpInspector.style.display='none'; draw(); });
+
+function updateMovingPlatInspector(){ const mp = movingPlatforms.find(m=>m.id===selectedMovingPlatId); if(!mp){ mpInspector.style.display='none'; return; } mpInspector.style.display='block'; mpTitle.textContent = mp.id; mpWidth.value = mp.w; mpHeight.value = mp.h; mpSpeed.value = mp.speed; mpMode.value = mp.mode; }
+mpWidth.addEventListener('change', ()=>{ const mp = movingPlatforms.find(m=>m.id===selectedMovingPlatId); if(!mp) return; const prev=clone(mp); mp.w = Math.max(8, Number(mpWidth.value)||mp.w); pushUndo({ type:'movePlatPropChange', id: mp.id, prev, next: clone(mp) }); clearRedo(); draw(); });
+mpHeight.addEventListener('change', ()=>{ const mp = movingPlatforms.find(m=>m.id===selectedMovingPlatId); if(!mp) return; const prev=clone(mp); mp.h = Math.max(4, Number(mpHeight.value)||mp.h); pushUndo({ type:'movePlatPropChange', id: mp.id, prev, next: clone(mp) }); clearRedo(); draw(); });
+mpSpeed.addEventListener('change', ()=>{ const mp = movingPlatforms.find(m=>m.id===selectedMovingPlatId); if(!mp) return; const prev=clone(mp); mp.speed = Math.max(1, Number(mpSpeed.value)||mp.speed); pushUndo({ type:'movePlatPropChange', id: mp.id, prev, next: clone(mp) }); clearRedo(); draw(); });
+mpMode.addEventListener('change', ()=>{ const mp = movingPlatforms.find(m=>m.id===selectedMovingPlatId); if(!mp) return; const prev=clone(mp); mp.mode = mpMode.value; pushUndo({ type:'movePlatPropChange', id: mp.id, prev, next: clone(mp) }); clearRedo(); draw(); });
+
+/* trampoline inspector */
+const trampInspectorEl = document.getElementById('trampInspector');
+const trampTitle = document.getElementById('trampTitle'), trampStrength = document.getElementById('trampStrength'), trampStrengthLabel = document.getElementById('trampStrengthLabel');
+document.getElementById('trampDeselect').addEventListener('click', ()=>{ selectedTrampolineId = null; trampInspectorEl.style.display='none'; draw(); });
+document.getElementById('trampDelete').addEventListener('click', ()=>{ const t = trampolines.find(tp=>tp.id===selectedTrampolineId); if(!t) return; const removed = clone([t]); trampolines = trampolines.filter(x=>x.id!==t.id); pushUndo({ type:'eraseTrampoline', tramps: removed, ids: removed.map(o=>o.id) }); clearRedo(); selectedTrampolineId=null; trampInspectorEl.style.display='none'; draw(); });
+
+function updateTrampInspector(){ const t = trampolines.find(tp=>tp.id===selectedTrampolineId); if(!t){ trampInspectorEl.style.display='none'; return; } trampInspectorEl.style.display='block'; trampTitle.textContent = t.id; trampStrength.value = t.strength; trampStrengthLabel.textContent = t.strength.toFixed(1); }
+trampStrength.addEventListener('input', ()=>{ const t=findTrampolineById(selectedTrampolineId); if(!t) return; t.strength = Number(trampStrength.value)||t.strength; trampStrengthLabel.textContent = t.strength.toFixed(1); draw(); });
+trampStrength.addEventListener('pointerup', ()=>{ const t=findTrampolineById(selectedTrampolineId); if(!t) return; pushUndo({ type:'trampPropChange', id: t.id, prev: null, next: clone(t) }); clearRedo(); });
+
+function findTrampolineById(id){ return trampolines.find(t=>t.id===id); }
+
+/* timed inspector */
+const timedInspectorEl = document.getElementById('timedInspector');
+document.getElementById('timedDeselect').addEventListener('click', ()=>{ selectedTimedId = null; timedInspectorEl.style.display='none'; draw(); });
+document.getElementById('timedDelete').addEventListener('click', ()=>{ const t = timedObstacles.find(x=>x.id===selectedTimedId); if(!t) return; const removed = clone([t]); timedObstacles = timedObstacles.filter(x=>x.id!==t.id); pushUndo({ type:'eraseTimed', items: removed, ids: removed.map(o=>o.id) }); clearRedo(); selectedTimedId=null; timedInspectorEl.style.display='none'; draw(); });
+
+function updateTimedInspector(){ const t = timedObstacles.find(x=>x.id===selectedTimedId); if(!t){ timedInspectorEl.style.display='none'; return; } timedInspectorEl.style.display='block'; document.getElementById('timedTitle').textContent = t.id; document.getElementById('timedW').value = t.w; document.getElementById('timedH').value = t.h; document.getElementById('timedPeriod').value = t.period; document.getElementById('timedOn').value = t.onDuration; document.getElementById('timedPhase').value = t.phase; document.getElementById('timedEnabled').checked = !!t.enabled; document.getElementById('timedState').innerText = 'State: ' + (timedIsActive(t) ? 'Active' : 'Inactive'); }
+
+document.getElementById('timedW').addEventListener('change', ()=>{ const t = timedObstacles.find(x=>x.id===selectedTimedId); if(!t) return; const prev = clone(t); t.w = Math.max(8, Number(document.getElementById('timedW').value)||t.w); pushUndo({ type:'timedPropChange', id: t.id, prev, next: clone(t) }); clearRedo(); draw(); });
+document.getElementById('timedH').addEventListener('change', ()=>{ const t = timedObstacles.find(x=>x.id===selectedTimedId); if(!t) return; const prev = clone(t); t.h = Math.max(8, Number(document.getElementById('timedH').value)||t.h); pushUndo({ type:'timedPropChange', id: t.id, prev, next: clone(t) }); clearRedo(); draw(); });
+document.getElementById('timedPeriod').addEventListener('change', ()=>{ const t = timedObstacles.find(x=>x.id===selectedTimedId); if(!t) return; const prev = clone(t); t.period = Math.max(0.05, Number(document.getElementById('timedPeriod').value)||t.period); pushUndo({ type:'timedPropChange', id: t.id, prev, next: clone(t) }); clearRedo(); updateTimedInspector(); draw(); });
+document.getElementById('timedOn').addEventListener('change', ()=>{ const t = timedObstacles.find(x=>x.id===selectedTimedId); if(!t) return; const prev = clone(t); t.onDuration = clamp(Number(document.getElementById('timedOn').value)||t.onDuration, 0, t.period || Infinity); pushUndo({ type:'timedPropChange', id: t.id, prev, next: clone(t) }); clearRedo(); updateTimedInspector(); draw(); });
+document.getElementById('timedPhase').addEventListener('change', ()=>{ const t = timedObstacles.find(x=>x.id===selectedTimedId); if(!t) return; const prev = clone(t); t.phase = Number(document.getElementById('timedPhase').value)||0; pushUndo({ type:'timedPropChange', id: t.id, prev, next: clone(t) }); clearRedo(); updateTimedInspector(); draw(); });
+document.getElementById('timedEnabled').addEventListener('change', ()=>{ const t = timedObstacles.find(x=>x.id===selectedTimedId); if(!t) return; const prev = clone(t); t.enabled = document.getElementById('timedEnabled').checked; pushUndo({ type:'timedPropChange', id: t.id, prev, next: clone(t) }); clearRedo(); updateTimedInspector(); draw(); });
+
+/* multi-ball UI */
+document.getElementById('addBallBtn').addEventListener('click', ()=>{ const b = addBallAt(120 + balls.length*30, 80 + balls.length*10, 'mouse'); selectedBallId = b.id; refreshBallSelect(); updateBallControlSelect(); draw(); });
+document.getElementById('removeBallBtn').addEventListener('click', ()=>{ removeSelectedBall(); });
+document.getElementById('mbClose').addEventListener('click', ()=>{ document.getElementById('multiBallPanel').style.display='none'; mode='draw'; document.querySelectorAll('.tool').forEach(x => x.classList.toggle('active', x.dataset.tool === mode)); });
+
+ballSelect.addEventListener('change', ()=>{ selectedBallId = ballSelect.value || null; updateBallControlSelect(); draw(); });
+ballControl.addEventListener('change', ()=>{ const b = balls.find(x=>x.id===selectedBallId); if(!b) return; const prev = clone(b); b.control = ballControl.value; pushUndo({ type:'ballControlChange', id: b.id, prev, next: clone(b) }); clearRedo(); draw(); });
+
+function refreshBallSelect(){ const prev = selectedBallId; ballSelect.innerHTML = ''; for(const b of balls){ const opt = document.createElement('option'); opt.value = b.id; opt.textContent = b.id + ' (' + b.control + ')'; ballSelect.appendChild(opt); } if(prev && balls.find(b=>b.id===prev)) ballSelect.value = prev; else if(balls.length) { selectedBallId = balls[0].id; ballSelect.value = selectedBallId; } else { selectedBallId = null; } }
+function updateBallControlSelect(){ const b = balls.find(x=>x.id===selectedBallId); if(!b){ ballControl.value='mouse'; ballControl.disabled=true; } else { ballControl.disabled=false; ballControl.value=b.control || 'mouse'; } }
+
+function addBallAt(x,y,control='mouse'){ const b = makeBall(x,y,12,control); balls.push(b); if(balls.length===1) startBalls = clone(balls); pushUndo({ type:'addBall', id: b.id, obj: clone(b) }); clearRedo(); refreshBallSelect(); return b; }
+function removeSelectedBall(){ if(!selectedBallId) return; const idx = balls.findIndex(b=>b.id===selectedBallId); if(idx === -1) return; const removed = balls.splice(idx,1); pushUndo({ type:'removeBall', items: clone(removed) }); clearRedo(); selectedBallId = balls[0] && balls[0].id || null; refreshBallSelect(); updateBallControlSelect(); draw(); }
+
+/* undo/redo */
+function pushUndo(a){ undoStack.push(a); if(undoStack.length>500) undoStack.shift(); }
+function pushRedo(a){ redoStack.push(a); if(redoStack.length>500) redoStack.shift(); }
+function clearRedo(){ redoStack.length = 0; }
+
+function undoLast(){
+  const a = undoStack.pop(); if(!a) return;
+  switch(a.type){
+    case 'draw': for(const seg of a.segs){ const idx = segments.lastIndexOf(seg); if(idx>=0) segments.splice(idx,1); } pushRedo(a); break;
+    case 'placeBox': { const idx = boxes.indexOf(a.item); if(idx>=0) boxes.splice(idx,1); pushRedo(a); break; }
+    case 'eraseSegment': { segments.splice(a.index,0,a.seg); pushRedo(a); break; }
+    case 'eraseBox': { boxes.splice(a.index,0,a.box); pushRedo(a); break; }
+    case 'moveBall': { const b = balls.find(x=>x.id===a.id); if(b && a.prev) { const curr={x:b.x,y:b.y}; b.x=a.prev.x; b.y=a.prev.y; b.vx=b.vy=0; pushRedo({type:'moveBall', id:a.id, prev:a.prev, next:curr}); } break; }
+    case 'moveGoal': { goal.x = a.prev.x; goal.y = a.prev.y; pushRedo(a); break; }
+    case 'placePortals': { for(const id of (a.ids||[])) portals = portals.filter(p=>p.id!==id); pushRedo(a); break; }
+    case 'erasePortal': { if(a.portals) portals.push(...clone(a.portals)); pushRedo(a); break; }
+    case 'rotatePortal': { const p = portals.find(x=>x.id===a.id); if(p) p.angle = a.prevAngle; pushRedo(a); break; }
+    case 'portalPropChange': { const p = portals.find(x=>x.id===a.id); if(p && a.prev) Object.assign(p, clone(a.prev)); pushRedo(a); break; }
+    case 'placeMovingPlat': { movingPlatforms = movingPlatforms.filter(m=>m.id!==a.id); pushRedo(a); break; }
+    case 'eraseMovingPlat': { if(a.plats) movingPlatforms.push(...clone(a.plats)); pushRedo(a); break; }
+    case 'movePlatPropChange': { const mp = movingPlatforms.find(x=>x.id===a.id); if(mp && a.prev) Object.assign(mp, clone(a.prev)); pushRedo(a); break; }
+    case 'placeTrampoline': { trampolines = trampolines.filter(tp=>tp.id!==a.id); pushRedo(a); break; }
+    case 'eraseTrampoline': { if(a.tramps) trampolines.push(...clone(a.tramps)); pushRedo(a); break; }
+    case 'trampPropChange': { const t = trampolines.find(x=>x.id===a.id); if(t && a.prev) Object.assign(t, clone(a.prev)); pushRedo(a); break; }
+    case 'placeTimed': { timedObstacles = timedObstacles.filter(t=>t.id!==a.id); pushRedo(a); break; }
+    case 'eraseTimed': { if(a.items) timedObstacles.push(...clone(a.items)); pushRedo(a); break; }
+    case 'timedPropChange': { const t = timedObstacles.find(x=>x.id===a.id); if(t && a.prev) Object.assign(t, clone(a.prev)); pushRedo(a); break; }
+    case 'clear': { const prev = a.prev; segments = clone(prev.segments); boxes = clone(prev.boxes); balls = clone(prev.balls); startBalls = clone(prev.startBalls); goal = clone(prev.goal); portals = clone(prev.portals||[]); movingPlatforms = clone(prev.movingPlatforms||[]); trampolines = clone(prev.trampolines||[]); timedObstacles = clone(prev.timedObstacles||[]); pushRedo(a); refreshBallSelect(); break; }
+    case 'addBall': { balls = balls.filter(b=>b.id!==a.id); pushRedo(a); refreshBallSelect(); break; }
+    case 'removeBall': { if(a.items) balls.push(...clone(a.items)); pushRedo(a); refreshBallSelect(); break; }
+    case 'ballControlChange': { const b = balls.find(x=>x.id===a.id); if(b && a.prev) Object.assign(b, clone(a.prev)); pushRedo(a); break; }
+    default: console.warn('undo unknown', a);
+  }
+  draw();
+}
+function redoLast(){
+  const a = redoStack.pop(); if(!a) return;
+  switch(a.type){
+    case 'draw': for(const seg of a.segs) segments.push(seg); pushUndo(a); break;
+    case 'placeBox': boxes.push(a.item); pushUndo(a); break;
+    case 'eraseSegment': { const idx=a.index; segments.splice(idx,1); pushUndo(a); break; }
+    case 'eraseBox': { boxes.splice(a.index,1); pushUndo(a); break; }
+    case 'moveBall': { const b = balls.find(x=>x.id===a.id); if(b && a.next){ const prev={x:b.x,y:b.y}; b.x=a.next.x; b.y=a.next.y; b.vx=b.vy=0; pushUndo({ type:'moveBall', id:a.id, prev, next: a.next }); } break; }
+    case 'moveGoal': { const prev={x:goal.x,y:goal.y}; goal.x = a.next.x; goal.y = a.next.y; pushUndo({ type:'moveGoal', prev, next: a.next }); break; }
+    case 'placePortals': { if(a.portalObjs) portals.push(...clone(a.portalObjs)); pushUndo(a); break; }
+    case 'erasePortal': { if(a.ids){ for(const id of a.ids) portals = portals.filter(p=>p.id!==id); } pushUndo(a); break; }
+    case 'rotatePortal': { const p = portals.find(x=>x.id===a.id); if(p) p.angle = a.nextAngle; pushUndo(a); break; }
+    case 'portalPropChange': { const p = portals.find(x=>x.id===a.id); if(p && a.next) Object.assign(p, clone(a.next)); pushUndo(a); break; }
+    case 'placeMovingPlat': { if(a.platObj) movingPlatforms.push(clone(a.platObj)); pushUndo(a); break; }
+    case 'eraseMovingPlat': { if(a.ids){ for(const id of a.ids) movingPlatforms = movingPlatforms.filter(mp=>mp.id!==id); } pushUndo(a); break; }
+    case 'movePlatPropChange': { const mp = movingPlatforms.find(x=>x.id===a.id); if(mp && a.next) Object.assign(mp, clone(a.next)); pushUndo(a); break; }
+    case 'placeTrampoline': { if(a.trampObj) trampolines.push(clone(a.trampObj)); pushUndo(a); break; }
+    case 'eraseTrampoline': { if(a.ids){ for(const id of a.ids) trampolines = trampolines.filter(tp=>tp.id!==id); } pushUndo(a); break; }
+    case 'trampPropChange': { const t = trampolines.find(x=>x.id===a.id); if(t && a.next) Object.assign(t, clone(a.next)); pushUndo(a); break; }
+    case 'placeTimed': { if(a.obj) timedObstacles.push(clone(a.obj)); pushUndo(a); break; }
+    case 'eraseTimed': { if(a.ids){ for(const id of a.ids) timedObstacles = timedObstacles.filter(t=>t.id!==id); } pushUndo(a); break; }
+    case 'timedPropChange': { const t = timedObstacles.find(x=>x.id===a.id); if(t && a.next) Object.assign(t, clone(a.next)); pushUndo(a); break; }
+    case 'clear': { const snapshot = a.prev; pushUndo({ type:'clear', prev: snapshot }); segments.length=0; boxes.length=0; balls.length=0; portals.length=0; movingPlatforms.length=0; trampolines.length=0; timedObstacles.length=0; draw(); break; }
+    case 'addBall': { if(a.obj) balls.push(clone(a.obj)); pushUndo(a); refreshBallSelect(); break; }
+    case 'removeBall': { if(a.items){ for(const it of a.items) balls = balls.filter(b=>b.id!==it.id); } pushUndo(a); refreshBallSelect(); break; }
+    case 'ballControlChange': { const b=findBallById(a.id); if(b && a.next) Object.assign(b, clone(a.next)); pushUndo(a); break; }
+    default: console.warn('redo unknown', a);
+  }
+  draw();
+}
+
+/* clear */
+function clearWorld(){
+  const prev = makeSaveObject();
+  segments.length=0; boxes.length=0;
+  balls = clone(startBalls.length ? startBalls : balls).map(b=>({ ...b, vx:0, vy:0, teleportCooldown:0, lastTrampolineTime:0 }));
+  portals.length=0; movingPlatforms.length=0; trampolines.length=0; timedObstacles.length=0;
+  pushUndo({ type:'clear', prev });
+  clearRedo();
+  refreshBallSelect();
+  draw();
+}
+
+/* helpers */
+function showStatus(text){ const el = document.getElementById('status'); el.innerText = text; setTimeout(()=>{ if(el.innerText === text) el.innerText = 'Mode: ' + (isPlaying ? 'Play' : (mode ? mode.charAt(0).toUpperCase()+mode.slice(1) : 'Edit')); }, 1400); }
+function clampGoalToCanvas(){ const W = canvas.clientWidth, H = canvas.clientHeight; goal.x = clamp(goal.x, goal.r, Math.max(goal.r, W - goal.r)); goal.y = clamp(goal.y, goal.r, Math.max(goal.r, H - goal.r)); }
+
+/* play/pause/reset/step */
+function resetLevel(){
+  isPlaying = false;
+  if(startBalls && startBalls.length) balls = clone(startBalls).map(b=>({ ...b, teleportCooldown:0, lastTrampolineTime:0 }));
+  else balls.forEach(b=>{ b.vx=0; b.vy=0; b.teleportCooldown=0; b.lastTrampolineTime=0; });
+  boxes.forEach(b=>{ b.vx=0; b.vy=0; });
+  movingPlatforms.forEach(mp=>{ mp.t = 0; mp.dir = 1; mp.x = mp.start.x; mp.y = mp.start.y; mp.vx = mp.vy = 0; });
+  document.getElementById('status').innerText = 'Mode: Edit';
+  refreshBallSelect(); updateBallControlSelect(); draw();
+}
+function play(){ if(!isPlaying) tries++; isPlaying = true; document.getElementById('tries').innerText = 'Tries: ' + tries; document.getElementById('status').innerText = 'Mode: Play'; }
+function pause(){ isPlaying = false; document.getElementById('status').innerText = 'Mode: Edit'; }
+
+/* helpers find */
+function findBallById(id){ return balls.find(b=>b.id===id); }
+function findPortalById(id){ return portals.find(p=>p.id===id); }
+function findMovingPlatById(id){ return movingPlatforms.find(m=>m.id===id); }
+function findTimedById(id){ return timedObstacles.find(t=>t.id===id); }
+
+/* initial load: use convertedSave to initialize scene */
+(function initFromConverted(){
+  try{
+    loadSceneFromObject(convertedSave);
+    // ensure id counters continue from objects
+    ballIdCounter = Math.max( (balls.map(b=>parseInt((b.id||'b0').replace(/[^\d]/g,''))||0).reduce((a,b)=>Math.max(a,b),0) + 1), ballIdCounter );
+    portalIdCounter = Math.max( (portals.map(p=>parseInt((p.id||'p0').replace(/[^\d]/g,''))||0).reduce((a,b)=>Math.max(a,b),0) + 1), portalIdCounter );
+    movingPlatIdCounter = Math.max( (movingPlatforms.map(m=>parseInt((m.id||'m0').replace(/[^\d]/g,''))||0).reduce((a,b)=>Math.max(a,b),0) + 1), movingPlatIdCounter );
+    trampolineIdCounter = Math.max( (trampolines.map(t=>parseInt((t.id||'tp0').replace(/[^\d]/g,''))||0).reduce((a,b)=>Math.max(a,b),0) + 1), trampolineIdCounter );
+    timedIdCounter = Math.max( (timedObstacles.map(t=>parseInt((t.id||'to0').replace(/[^\d]/g,''))||0).reduce((a,b)=>Math.max(a,b),0) + 1), timedIdCounter );
+    // finish UI
+    refreshBallSelect(); updateBallControlSelect(); draw();
+    console.log('Converted save loaded into the editor.');
+  }catch(err){
+    console.error('Failed to initialize from convertedSave', err);
+    // fallback: create a simple sample level
+    segments = [ { ax:40, ay:720, bx:1160, by:720 } ];
+    boxes = [];
+    balls = [ makeBall(120,80,12,'mouse') ];
+    startBalls = clone(balls);
+    goal = { x:1060, y:640, r:28 };
+    movingPlatforms.length = trampolines.length = timedObstacles.length = portals.length = 0;
+    refreshBallSelect(); updateBallControlSelect(); draw();
+  }
+})();
+
+/* loop */
+let last = performance.now();
+function loop(now){ const elapsed = (now - last)/1000; last = now; if(isPlaying){ let accum = elapsed, iter=0; while(accum>0 && iter<10){ const stepDt = Math.min(dt, accum); simulateStep(stepDt); accum -= stepDt; iter++; } } draw(); requestAnimationFrame(loop); }
+requestAnimationFrame(loop);
+
+/* done */
+</script>
+</body>
+</html>
